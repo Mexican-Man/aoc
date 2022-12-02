@@ -1,6 +1,6 @@
 name: Update Badges on README
 
-on: workflow_dispatch
+on: push
 
 jobs:
   test:
