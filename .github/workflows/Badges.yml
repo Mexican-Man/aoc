@@ -1,0 +1,17 @@
+name: Update Badges on README
+
+on: workflow_dispatch
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: joblo2213/aoc-badges-action@master
+        with:
+          userid: 2354113
+          session: ${{ secrets.AOC_SESSION }}
+      - uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: Update badges
+          file_pattern: README.md
