@@ -53,7 +53,7 @@ class Command {
                 }
                 break;
             case 'ls':
-                return new Dir(this._pwd, this._out.split('\n'));
+                return new Dir(this._pwd.split('/').pop() || '/', this._out.split('\n'));
         }
     }
 
@@ -90,39 +90,83 @@ class Dir {
     }
 
     size(): number {
-        return this.files.reduce((acc, file) => file instanceof File ? acc + file.size : file.size(), 0);
+        return this.files.reduce((acc, file) => acc + (file instanceof File ? file.size : file.size()), 0);
+    }
+
+    findMax(size: number): Array<Dir> {
+        const max = new Array<Dir>();
+        if (this.size() < size) {
+            max.push(this);
+        }
+        this.files.forEach((file) => {
+            if (file instanceof Dir) {
+                max.push(...file.findMax(size));
+            }
+        });
+        return max;
+    }
+
+    findMin(size: number): Dir | null {
+        let min: Dir | null = null;
+        if (this.size() >= size) {
+            min = this;
+        }
+
+        min = this.files.reduce((acc, file) => {
+            if (file instanceof Dir) {
+                const childMin = file.findMin(size);
+                if (childMin && childMin.size() >= size) {
+                    if (!acc || childMin.size() < acc.size()) {
+                        return childMin;
+                    }
+                }
+            }
+            return acc;
+        }, min);
+
+        return min;
     }
 }
 
 class OS {
     readonly root: Dir;
-    readonly fs: Map<string, Dir>;
     private _pwd: string;
 
     constructor(commands: Array<Array<string>>) {
         this.root = new Dir('/', []);
         this._pwd = '/';
-        this.fs = new Map<string, Dir>();
 
-        for (const command of commands) {
+        for (const command of commands.slice(1)) {
             const cmd = new Command(this._pwd, command[0], command.slice(1).join('\n'));
             const res = cmd.exec();
-            if (res) {
-                this.fs.set(cmd.pwd, res);
+            if (!res) {
+                this._pwd = cmd.pwd;
             }
-            this._pwd = cmd.pwd;
-        }
-    }
 
-    findMax(size: number): Array<Dir> {
-        const max = new Array<Dir>();
-        this.fs.forEach((dir) => {
-            if (dir.name === '/') { return; }
-            if (dir.size() < size) {
-                max.push(dir);
+            const dirs = cmd.pwd.split('/');
+            dirs[0] = '/'; // [ '', 'a', 'b', 'c' ] -> [ '/', 'a', 'b', 'c' ]
+
+            // Remove trailing slash
+            if (dirs[dirs.length - 1] === '') {
+                dirs.pop();
             }
-        });
-        return max;
+
+            // Traverse to the directory
+            let dir = this.root;
+
+            // A bit janky, but we're already inside /, so looking for / doesn't make sense
+            if (dirs.length > 1) {
+                for (const d of dirs.slice(1)) { // Again, skip /, we're already there
+                    dir = dir.files.find((file) => file instanceof Dir && file.name === d) as Dir;
+                }
+            }
+
+            // Add the file or directory
+            // Because cmd.exec() returns the Dir itself, rather than Array<File | Dir>, we need to object.assign it
+            if (res instanceof Dir) {
+                Object.assign(dir, res);
+            }
+        }
     }
 }
 
@@ -134,7 +178,4 @@ const splitInput = input
 
 const os = new OS(splitInput);
 
-
-// console.log(JSON.stringify(Object.fromEntries(os.fs.entries()), null, 2));
-
-os.findMax(100000).forEach((dir) => dir.name.split('/').length < 4 ? console.log(dir.name, dir.size()) : undefined);
+console.log(`Part 1: ${os.root.findMax(100000).reduce((acc, dir) => acc + dir.size(), 0)}, Part 2: ${os.root.findMin(30000000 - (70000000 - os.root.size()))!.size()}`);
