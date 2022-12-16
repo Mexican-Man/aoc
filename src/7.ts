@@ -27,24 +27,33 @@ $ ls
 class Command {
     private _pwd: string;
     private _cmd: Array<string>;
+    private _out: string;
 
-    constructor(pwd: string, input: string) {
+    constructor(pwd: string, input: string, output: string) {
         this._pwd = pwd;
         this._cmd = input.trim().split(' ');
+        this._out = output;
     }
 
-    exec(): void {
-
-        if (this._cmd[0] === 'cd') {
-            if (this._cmd[1] === '..') {
-                this._pwd = this._pwd.split('/').slice(0, -1).join('/');
-            } else {
-                this._pwd = this._pwd + '/' + this._cmd[1];
-            }
-        } else if (this._cmd[0].startsWith('ls')) {
-            console.log(this._cmd);
-            const dir = new Dir(this._pwd, this._cmd[1]);
-            // console.log(dir);
+    exec(): Dir | void {
+        switch (this._cmd[0]) {
+            case 'cd':
+                switch (this._cmd[1]) {
+                    case '/':
+                        this._pwd = '/';
+                        break;
+                    case '.':
+                        break;
+                    case '..':
+                        this._pwd = this._pwd.split('/').slice(0, -1).join('/');
+                        break;
+                    default:
+                        this._pwd = this._pwd + (this._pwd === '/' ? '' : '/') + this._cmd[1];
+                        break;
+                }
+                break;
+            case 'ls':
+                return new Dir(this._pwd, this._out.split('\n'));
         }
     }
 
@@ -65,22 +74,67 @@ class File {
 
 class Dir {
     readonly name: string;
-    readonly files: Array<File>;
+    readonly files: Array<File | Dir>;
 
-    constructor(name: string, files: string) {
+    constructor(name: string, files: Array<string>) {
         this.name = name;
-        this.files = files.split('\n').map(file => {
+        this.files = new Array<File | Dir>();
+        files.forEach((file) => {
             const [size, name] = file.split(' ');
-            return new File(name, parseInt(size));
+            if (size.startsWith('dir')) {
+                this.files.push(new Dir(name, []));
+            } else {
+                this.files.push(new File(name, parseInt(size)));
+            }
         });
+    }
+
+    size(): number {
+        return this.files.reduce((acc, file) => file instanceof File ? acc + file.size : file.size(), 0);
     }
 }
 
-const splitInput = input.split('$');
+class OS {
+    readonly root: Dir;
+    readonly fs: Map<string, Dir>;
+    private _pwd: string;
 
-let pwd = "/";
-for (const command of splitInput) {
-    const cmd = new Command(pwd, command);
-    cmd.exec();
-    pwd = cmd.pwd;
+    constructor(commands: Array<Array<string>>) {
+        this.root = new Dir('/', []);
+        this._pwd = '/';
+        this.fs = new Map<string, Dir>();
+
+        for (const command of commands) {
+            const cmd = new Command(this._pwd, command[0], command.slice(1).join('\n'));
+            const res = cmd.exec();
+            if (res) {
+                this.fs.set(cmd.pwd, res);
+            }
+            this._pwd = cmd.pwd;
+        }
+    }
+
+    findMax(size: number): Array<Dir> {
+        const max = new Array<Dir>();
+        this.fs.forEach((dir) => {
+            if (dir.name === '/') { return; }
+            if (dir.size() < size) {
+                max.push(dir);
+            }
+        });
+        return max;
+    }
 }
+
+const splitInput = input
+    .split('$')
+    .map((io) => io
+        .trim()
+        .split('\n'));
+
+const os = new OS(splitInput);
+
+
+// console.log(JSON.stringify(Object.fromEntries(os.fs.entries()), null, 2));
+
+os.findMax(100000).forEach((dir) => dir.name.split('/').length < 4 ? console.log(dir.name, dir.size()) : undefined);
